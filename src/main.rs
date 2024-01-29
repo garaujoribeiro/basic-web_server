@@ -1,25 +1,39 @@
-use std::{ fs, io::{ BufRead, BufReader, Write }, net::{ TcpListener, TcpStream } };
+use std::{
+    fs,
+    io::{ BufRead, BufReader, Write },
+    net::{ TcpListener, TcpStream },
+    thread,
+    time::Duration,
+};
+
+use basic_web_server::ThreadPool;
+
 
 fn main() {
     let address: String = String::from("127.0.0.1:7878");
+    let pool = ThreadPool::new(4);
     let listener = TcpListener::bind(&address).unwrap();
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
 
-        handle_connection(stream);
+        pool.execute(|| {
+            handle_connection(stream);
+        });
     }
 }
 
 fn handle_connection(mut stream: TcpStream) {
     let buf_reader = BufReader::new(&mut stream);
     let request_line = buf_reader.lines().next().unwrap().unwrap();
-    let sucess_request = request_line == "GET / HTTP/1.1";
 
-    let (status_line, path) = if sucess_request {
-        ("HTTP/1.1 200 OK", "hello.html")
-    } else {
-        ("HTTP/1.1 404 NOT FOUND", "404.html")
+    let (status_line, path) = match &request_line[..] {
+        "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),
+        "GET /sleep HTTP/1.1" => {
+            thread::sleep(Duration::from_secs(5));
+            ("HTTP/1.1 200 OK", "hello.html")
+        }
+        _ => ("HTTP/1.1 404 NOT FOUND", "404.html"),
     };
 
     handle_response(stream, status_line, path)
